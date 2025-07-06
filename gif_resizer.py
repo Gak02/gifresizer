@@ -77,13 +77,33 @@ def main():
                         # Slackスタンプ最適化が有効な場合
                         if slack_optimization:
                             st.info(f"🎯 Slackスタンプ用に最適化中... ({slack_optimization})")
+                            
+                            # 進捗バーを表示
+                            progress_bar = st.progress(0)
+                            status_text = st.empty()
+                            
                             try:
+                                if slack_optimization == "lightweight":
+                                    status_text.text("🔄 段階的最適化を実行中...")
+                                    progress_bar.progress(25)
+                                
                                 resized_gif_bytes = processor.create_slack_stamp(slack_optimization)
                                 new_width = new_height = 128  # Slackスタンプサイズ
+                                
+                                progress_bar.progress(100)
+                                status_text.text("✅ 最適化完了！")
                                 st.success("✅ Slackスタンプ最適化が完了しました！")
+                                
                             except ValueError as e:
+                                progress_bar.progress(100)
+                                status_text.text("❌ 最適化失敗")
                                 st.error(f"Slackスタンプ最適化に失敗しました: {str(e)}")
-                                st.info("💡 より軽量な最適化レベルを試してください")
+                                
+                                if "元のファイルサイズが大きすぎる" in str(e):
+                                    st.warning("⚠️ 元のファイルが大きすぎるため、128KB以下に圧縮できませんでした。")
+                                    st.info("💡 より小さなGIFファイルを使用するか、手動で事前にリサイズしてください。")
+                                else:
+                                    st.info("💡 より軽量な最適化レベルを試してください")
                                 return
                         else:
                             # アスペクト比を維持する場合の調整

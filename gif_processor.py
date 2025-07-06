@@ -14,6 +14,8 @@ from constants import (
     SLACK_OPTIMIZATION_QUALITY_MIN,
     SLACK_OPTIMIZATION_QUALITY_STEP,
     SLACK_OPTIMIZATION_DURATION_MAX,
+    SLACK_AGGRESSIVE_MAX_FRAMES,
+    SLACK_AGGRESSIVE_DURATION,
     PYGIFSICLE_OPTIMIZATION_LEVELS
 )
 from utils import validate_image_size
@@ -154,6 +156,10 @@ class GIFProcessor:
                 
                 # フレーム間隔を短縮してファイルサイズを削減
                 save_kwargs['duration'] = min(self.original_info['duration'], SLACK_OPTIMIZATION_DURATION_MAX)
+                
+                # 色数を削減（256色→128色）
+                for i, frame in enumerate(frames):
+                    frames[i] = frame.quantize(colors=128, method=2)
             
             # 最初のフレームを保存し、残りのフレームを追加
             frames[0].save(output, **save_kwargs)
@@ -225,20 +231,39 @@ class GIFProcessor:
             # pygifsicleで強力な最適化を適用
             result = self.optimize_with_pygifsicle(result, "aggressive")
             
-            # サイズチェック
-            if len(result) > SLACK_STAMP_MAX_SIZE_BYTES:
-                # さらに強力な最適化を試行
-                result = self._force_optimize_for_slack(result)
-                
-                # pygifsicleで再度最適化
-                result = self.optimize_with_pygifsicle(result, "aggressive")
-                
-                # 最終チェック
-                if len(result) > SLACK_STAMP_MAX_SIZE_BYTES:
-                    raise ValueError(f"Slackスタンプのサイズ制限（{SLACK_STAMP_MAX_SIZE_KB}KB）を超えています。"
-                                   f"現在のサイズ: {len(result) / 1024:.1f}KB")
+            # サイズチェックと段階的最適化
+            optimization_steps = [
+                ("標準最適化", lambda: result),
+                ("強力最適化", lambda: self._force_optimize_for_slack(result)),
+                ("超強力最適化", lambda: self._ultra_optimize_for_slack(result))
+            ]
             
-            return result
+            for step_name, optimize_func in optimization_steps:
+                try:
+                    current_result = optimize_func()
+                    current_size = len(current_result)
+                    
+                    if current_size <= SLACK_STAMP_MAX_SIZE_BYTES:
+                        return current_result
+                    
+                    # 次のステップに進む前にpygifsicleで最適化
+                    if step_name != "標準最適化":
+                        current_result = self.optimize_with_pygifsicle(current_result, "aggressive")
+                        if len(current_result) <= SLACK_STAMP_MAX_SIZE_BYTES:
+                            return current_result
+                    
+                except Exception as e:
+                    print(f"{step_name}でエラー: {e}")
+                    continue
+            
+            # すべての最適化を試しても128KBを超える場合
+            final_result = self._ultra_optimize_for_slack(result)
+            if len(final_result) > SLACK_STAMP_MAX_SIZE_BYTES:
+                raise ValueError(f"Slackスタンプのサイズ制限（{SLACK_STAMP_MAX_SIZE_KB}KB）を超えています。"
+                               f"現在のサイズ: {len(final_result) / 1024:.1f}KB\n"
+                               f"元のファイルサイズが大きすぎるため、128KB以下に圧縮できませんでした。")
+            
+            return final_result
         
         else:
             raise ValueError("無効な最適化レベルです")
@@ -258,8 +283,8 @@ class GIFProcessor:
         # 新しいプロセッサーを作成
         temp_processor = GIFProcessor(gif_bytes)
         
-        # フレーム数をさらに制限（30フレームまで）
-        max_frames = min(SLACK_STAMP_MAX_FRAMES, 30)
+        # フレーム数をさらに制限（20フレームまで）
+        max_frames = min(SLACK_STAMP_MAX_FRAMES, SLACK_AGGRESSIVE_MAX_FRAMES)
         
         # より低い品質で再処理
         result = temp_processor.resize(
@@ -270,6 +295,75 @@ class GIFProcessor:
         )
         
         return result
+    
+    def _ultra_optimize_for_slack(self, gif_bytes):
+        """
+        Slackスタンプ用の超強力最適化（最後の手段）
+        
+        Args:
+            gif_bytes: 最適化するGIFのバイトデータ
+        
+        Returns:
+            bytes: 最適化されたGIFのバイトデータ
+        """
+        from constants import SLACK_STAMP_SIZE, SLACK_STAMP_MAX_SIZE_BYTES
+        
+        try:
+            # PILでGIFを開く
+            gif = Image.open(io.BytesIO(gif_bytes))
+            
+            # 超強力最適化用の設定
+            frames = []
+            frame_index = 0
+            max_frames = 10  # さらに少ないフレーム数
+            
+            # フレームを間引いて取得（1フレームおきに取得）
+            while frame_index < max_frames:
+                try:
+                    gif.seek(frame_index * 2)  # 2フレームおきに取得
+                    frame = gif.copy()
+                    frame = frame.resize((SLACK_STAMP_SIZE, SLACK_STAMP_SIZE), Image.Resampling.LANCZOS)
+                    
+                    # 色数を削減（256色→64色）
+                    frame = frame.quantize(colors=64, method=2)
+                    
+                    frames.append(frame)
+                    frame_index += 1
+                except EOFError:
+                    break
+            
+            if not frames:
+                # フレームが取得できない場合は最初のフレームのみ使用
+                gif.seek(0)
+                frame = gif.copy()
+                frame = frame.resize((SLACK_STAMP_SIZE, SLACK_STAMP_SIZE), Image.Resampling.LANCZOS)
+                frame = frame.quantize(colors=32, method=2)
+                frames = [frame]
+            
+            # 超強力最適化で保存
+            output = io.BytesIO()
+            save_kwargs = {
+                'format': 'GIF',
+                'save_all': True,
+                'append_images': frames[1:] if len(frames) > 1 else [],
+                'duration': SLACK_AGGRESSIVE_DURATION,  # 30ms
+                'loop': 0,
+                'optimize': True,
+                'quality': 1,  # 最低品質
+                'transparency': 0,
+                'disposal': 2,
+            }
+            
+            frames[0].save(output, **save_kwargs)
+            result = output.getvalue()
+            
+            # pygifsicleで最終最適化
+            result = self.optimize_with_pygifsicle(result, "aggressive")
+            
+            return result
+            
+        except Exception as e:
+            raise ValueError(f"超強力最適化中にエラーが発生しました: {str(e)}")
     
     def optimize_with_pygifsicle(self, gif_bytes, optimization_level="standard"):
         """

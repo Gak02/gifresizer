@@ -1,0 +1,28 @@
+[server]
+# XSRF保護の設定（403エラー回避のため無効化可能）
+enableXsrfProtection = true
+# ファイルアップロードの最大サイズ（MB）
+maxUploadSize = 200
+# サーバーポート
+port = 8501
+# サーバーアドレス
+address = "localhost"
+
+[browser]
+# ブラウザの設定
+gatherUsageStats = false
+# サーバーアドレス（XSRF保護用）
+serverAddress = "localhost"
+# サーバーポート（XSRF保護用）
+serverPort = 8501
+
+[theme]
+# テーマ設定
+primaryColor = "#FF6B6B"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F0F2F6"
+textColor = "#262730"
+
+[client]
+# クライアント設定
+showErrorDetails = true 

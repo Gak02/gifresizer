@@ -3,16 +3,16 @@
 enableXsrfProtection = true
 # ファイルアップロードの最大サイズ（MB）
 maxUploadSize = 200
-# サーバーポート
+# サーバーポート（競合時は8502, 8503などに変更）
 port = 8501
 # サーバーアドレス
-address = "localhost"
+address = "0.0.0.0"
 
 [browser]
 # ブラウザの設定
 gatherUsageStats = false
 # サーバーアドレス（XSRF保護用）
-serverAddress = "localhost"
+serverAddress = "0.0.0.0"
 # サーバーポート（XSRF保護用）
 serverPort = 8501
 
@@ -25,4 +25,15 @@ textColor = "#262730"
 
 [client]
 # クライアント設定
-showErrorDetails = true 
+showErrorDetails = true
+
+[runner]
+# ファイル監視を無効化（inotify watch limit回避）
+magicEnabled = false
+installTracer = false
+fixMatplotlib = true
+
+[logger]
+# ログ設定
+level = "info"
+messageFormat = "%(asctime)s %(message)s" 

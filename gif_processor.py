@@ -4,7 +4,7 @@ GIF処理のコア機能
 
 import io
 from PIL import Image
-from constants import DEFAULT_DURATION, DEFAULT_LOOP
+from constants import DEFAULT_DURATION, DEFAULT_LOOP, SLACK_STAMP_MAX_SIZE_BYTES
 from utils import validate_image_size
 
 class GIFProcessor:

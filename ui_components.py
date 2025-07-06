@@ -232,9 +232,16 @@ def render_sidebar():
         
         **最適化レベル:**
         - 標準: 128×128pxのみ
-        - 最適化: +50フレーム制限
-        - 軽量: +128KB以下保証
+        - 最適化: +50フレーム制限 + pygifsicle最適化
+        - 軽量: +128KB以下保証 + 強力最適化
         """)
+        
+        # pygifsicle利用可能性の表示
+        try:
+            from pygifsicle import optimize
+            st.success("✅ pygifsicle最適化が利用可能です")
+        except ImportError:
+            st.info("ℹ️ pygifsicle最適化は利用できません（Pillow最適化を使用）")
         
         st.header("💡 ヒント")
         st.write("""

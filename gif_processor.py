@@ -3,6 +3,8 @@ GIF処理のコア機能
 """
 
 import io
+import tempfile
+import os
 from PIL import Image
 from constants import (
     DEFAULT_DURATION, 
@@ -11,9 +13,17 @@ from constants import (
     SLACK_OPTIMIZATION_QUALITY_START,
     SLACK_OPTIMIZATION_QUALITY_MIN,
     SLACK_OPTIMIZATION_QUALITY_STEP,
-    SLACK_OPTIMIZATION_DURATION_MAX
+    SLACK_OPTIMIZATION_DURATION_MAX,
+    PYGIFSICLE_OPTIMIZATION_LEVELS
 )
 from utils import validate_image_size
+
+# pygifsicleのインポート（オプション）
+try:
+    from pygifsicle import optimize
+    PYGIFSICLE_AVAILABLE = True
+except ImportError:
+    PYGIFSICLE_AVAILABLE = False
 
 class GIFProcessor:
     """GIFファイルの処理を行うクラス"""
@@ -161,12 +171,21 @@ class GIFProcessor:
                     frames[0].save(output, **save_kwargs)
                     result_bytes = output.getvalue()
                 
+                # pygifsicleで最終最適化
+                result_bytes = self.optimize_with_pygifsicle(result_bytes, "optimized")
+                
                 return result_bytes
             
         except Exception as e:
             raise ValueError(f"GIF保存中にエラーが発生しました: {str(e)}")
         
-        return output.getvalue()
+        result_bytes = output.getvalue()
+        
+        # 通常のリサイズでも軽度の最適化を適用
+        if PYGIFSICLE_AVAILABLE:
+            result_bytes = self.optimize_with_pygifsicle(result_bytes, "standard")
+        
+        return result_bytes
     
     def create_slack_stamp(self, optimization_level="standard"):
         """
@@ -203,10 +222,16 @@ class GIFProcessor:
             result = self.resize(SLACK_STAMP_SIZE, SLACK_STAMP_SIZE, 
                                optimize_for_slack=True, max_frames=SLACK_STAMP_MAX_FRAMES)
             
+            # pygifsicleで強力な最適化を適用
+            result = self.optimize_with_pygifsicle(result, "aggressive")
+            
             # サイズチェック
             if len(result) > SLACK_STAMP_MAX_SIZE_BYTES:
                 # さらに強力な最適化を試行
                 result = self._force_optimize_for_slack(result)
+                
+                # pygifsicleで再度最適化
+                result = self.optimize_with_pygifsicle(result, "aggressive")
                 
                 # 最終チェック
                 if len(result) > SLACK_STAMP_MAX_SIZE_BYTES:
@@ -245,6 +270,44 @@ class GIFProcessor:
         )
         
         return result
+    
+    def optimize_with_pygifsicle(self, gif_bytes, optimization_level="standard"):
+        """
+        pygifsicleを使用してGIFを最適化
+        
+        Args:
+            gif_bytes: 最適化するGIFのバイトデータ
+            optimization_level: 最適化レベル ("standard", "optimized", "aggressive")
+        
+        Returns:
+            bytes: 最適化されたGIFのバイトデータ
+        """
+        if not PYGIFSICLE_AVAILABLE:
+            return gif_bytes  # pygifsicleが利用できない場合は元のデータを返す
+        
+        try:
+            # 一時ファイルにGIFを保存
+            with tempfile.NamedTemporaryFile(suffix='.gif', delete=False) as temp_file:
+                temp_file.write(gif_bytes)
+                temp_file_path = temp_file.name
+            
+            # pygifsicleで最適化
+            optimize_level = PYGIFSICLE_OPTIMIZATION_LEVELS.get(optimization_level, 1)
+            optimize(temp_file_path, optimization_level=optimize_level)
+            
+            # 最適化されたファイルを読み込み
+            with open(temp_file_path, 'rb') as optimized_file:
+                optimized_bytes = optimized_file.read()
+            
+            # 一時ファイルを削除
+            os.unlink(temp_file_path)
+            
+            return optimized_bytes
+            
+        except Exception as e:
+            # エラーが発生した場合は元のデータを返す
+            print(f"pygifsicle最適化エラー: {e}")
+            return gif_bytes
     
     def get_info(self):
         """

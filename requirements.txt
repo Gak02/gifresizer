@@ -3,3 +3,6 @@ streamlit>=1.28.0
 
 # Pillow - 画像処理ライブラリ
 Pillow>=10.0.0
+
+# pygifsicle - GIF最適化ライブラリ
+pygifsicle>=1.0.0

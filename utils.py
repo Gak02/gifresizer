@@ -2,12 +2,8 @@
 GIF Resizer アプリケーションのユーティリティ関数
 """
 
-import io
-from PIL import Image
 from constants import (
     MAX_FILE_SIZE_BYTES, 
-    DEFAULT_DURATION, 
-    DEFAULT_LOOP,
     MIN_IMAGE_SIZE,
     MAX_IMAGE_SIZE
 )
@@ -120,40 +116,8 @@ def calculate_size_change(original_size, new_size):
         return 0.0
     return (new_size - original_size) / original_size * 100
 
-def get_gif_info(gif_bytes):
-    """
-    GIFファイルの情報を取得する
-    
-    Args:
-        gif_bytes: GIFファイルのバイトデータ
-    
-    Returns:
-        dict: GIF情報
-    """
-    try:
-        gif = Image.open(io.BytesIO(gif_bytes))
-        frames = []
-        
-        # フレーム数をカウント
-        frame_count = 0
-        while True:
-            try:
-                gif.seek(frame_count)
-                frames.append(gif.copy())
-                frame_count += 1
-            except EOFError:
-                break
-        
-        return {
-            'width': gif.size[0],
-            'height': gif.size[1],
-            'frame_count': frame_count,
-            'duration': gif.info.get('duration', DEFAULT_DURATION),
-            'loop': gif.info.get('loop', DEFAULT_LOOP),
-            'format': gif.format
-        }
-    except Exception as e:
-        raise ValueError(f"GIFファイルの読み込みに失敗しました: {str(e)}")
+# この関数は gif_processor.py の get_info() と重複するため削除
+# GIFProcessor クラスを使用してください
 
 def create_download_filename(original_name, new_width, new_height):
     """

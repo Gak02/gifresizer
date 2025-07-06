@@ -77,8 +77,14 @@ def main():
                         # Slackスタンプ最適化が有効な場合
                         if slack_optimization:
                             st.info(f"🎯 Slackスタンプ用に最適化中... ({slack_optimization})")
-                            resized_gif_bytes = processor.create_slack_stamp(slack_optimization)
-                            new_width = new_height = 128  # Slackスタンプサイズ
+                            try:
+                                resized_gif_bytes = processor.create_slack_stamp(slack_optimization)
+                                new_width = new_height = 128  # Slackスタンプサイズ
+                                st.success("✅ Slackスタンプ最適化が完了しました！")
+                            except ValueError as e:
+                                st.error(f"Slackスタンプ最適化に失敗しました: {str(e)}")
+                                st.info("💡 より軽量な最適化レベルを試してください")
+                                return
                         else:
                             # アスペクト比を維持する場合の調整
                             if maintain_aspect:

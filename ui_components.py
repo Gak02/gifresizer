@@ -6,6 +6,7 @@ import streamlit as st
 from constants import (
     RESIZE_METHODS, 
     PRESET_SIZES, 
+    SLACK_STAMP_PRESETS,
     MIN_SCALE_PERCENT, 
     MAX_SCALE_PERCENT, 
     DEFAULT_SCALE_PERCENT,
@@ -54,6 +55,7 @@ def render_resize_settings(original_width, original_height):
     )
     
     new_width = new_height = None
+    slack_optimization = None
     
     if resize_method == "カスタムサイズ":
         new_width = st.number_input(
@@ -84,12 +86,32 @@ def render_resize_settings(original_width, original_height):
         st.write(f"新しいサイズ: {new_width} × {new_height} px")
         
     else:  # プリセットサイズ
+        # 通常のプリセットサイズ
         preset = st.selectbox(
             "プリセットサイズを選択:",
             PRESET_SIZES
         )
         new_width, new_height = map(int, preset.split('x'))
         st.write(f"選択されたサイズ: {new_width} × {new_height} px")
+    
+    # Slackスタンプ専用オプション
+    if st.checkbox("🎯 Slackスタンプ用に最適化", value=False):
+        st.info("Slackスタンプ用の最適化を適用します（128×128px、128KB以下、50フレーム以下）")
+        slack_preset = st.selectbox(
+            "Slackスタンプ最適化レベル:",
+            SLACK_STAMP_PRESETS
+        )
+        
+        if slack_preset == "Slackスタンプ (128×128)":
+            slack_optimization = "standard"
+        elif slack_preset == "Slackスタンプ 最適化 (128×128, 50フレーム以下)":
+            slack_optimization = "optimized"
+        elif slack_preset == "Slackスタンプ 軽量 (128×128, 128KB以下)":
+            slack_optimization = "lightweight"
+        
+        # サイズを128×128に固定
+        new_width = new_height = 128
+        st.success("✅ Slackスタンプ用に128×128pxに設定されました")
     
     # アスペクト比を維持するオプション
     maintain_aspect = st.checkbox(
@@ -112,7 +134,7 @@ def render_resize_settings(original_width, original_height):
                 new_width = int(new_height * aspect_ratio)
                 st.rerun()
     
-    return new_width, new_height, maintain_aspect
+    return new_width, new_height, maintain_aspect, slack_optimization
 
 def render_resize_result(processor, resized_gif_bytes, new_width, new_height, original_size):
     """リサイズ結果を表示"""
@@ -133,6 +155,32 @@ def render_resize_result(processor, resized_gif_bytes, new_width, new_height, or
             st.write(f"**サイズ変化:** +{size_change:.1f}% 📈")
         else:
             st.write(f"**サイズ変化:** {size_change:.1f}% 📉")
+        
+        # Slackスタンプ適合性チェック
+        from constants import SLACK_STAMP_SIZE, SLACK_STAMP_MAX_SIZE_BYTES, SLACK_STAMP_MAX_FRAMES
+        
+        if new_width == SLACK_STAMP_SIZE and new_height == SLACK_STAMP_SIZE:
+            st.write("🎯 **Slackスタンプ適合性:**")
+            
+            # サイズチェック
+            if len(resized_gif_bytes) <= SLACK_STAMP_MAX_SIZE_BYTES:
+                st.write("✅ ファイルサイズ: 128KB以下")
+            else:
+                st.write(f"❌ ファイルサイズ: {len(resized_gif_bytes) / 1024:.1f}KB (128KB超過)")
+            
+            # フレーム数チェック
+            frame_count = processor.get_frame_count()
+            if frame_count <= SLACK_STAMP_MAX_FRAMES:
+                st.write("✅ フレーム数: 50フレーム以下")
+            else:
+                st.write(f"❌ フレーム数: {frame_count}フレーム (50フレーム超過)")
+            
+            # 総合判定
+            if (len(resized_gif_bytes) <= SLACK_STAMP_MAX_SIZE_BYTES and 
+                frame_count <= SLACK_STAMP_MAX_FRAMES):
+                st.success("🎉 **Slackスタンプとして使用可能です！**")
+            else:
+                st.warning("⚠️ **Slackスタンプ用に最適化が必要です**")
     
     with col4:
         st.subheader("🎞️ リサイズ後のGIF")

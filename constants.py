@@ -6,6 +6,12 @@ GIF Resizer アプリケーションの定数定義
 MAX_FILE_SIZE_MB = 200
 MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
 
+# Slackスタンプ要件
+SLACK_STAMP_MAX_SIZE_KB = 128
+SLACK_STAMP_MAX_SIZE_BYTES = SLACK_STAMP_MAX_SIZE_KB * 1024
+SLACK_STAMP_SIZE = 128
+SLACK_STAMP_MAX_FRAMES = 50
+
 # 画像サイズ制限
 MIN_IMAGE_SIZE = 10
 MAX_IMAGE_SIZE = 2000
@@ -22,6 +28,13 @@ PRESET_SIZES = [
     "256x256",
     "480x480",
     "512x512"
+]
+
+# Slackスタンプ専用プリセット
+SLACK_STAMP_PRESETS = [
+    "Slackスタンプ (128×128)",
+    "Slackスタンプ 最適化 (128×128, 50フレーム以下)",
+    "Slackスタンプ 軽量 (128×128, 128KB以下)"
 ]
 
 # リサイズ方法

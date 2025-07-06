@@ -55,13 +55,15 @@ class GIFProcessor:
         
         return frame_count
     
-    def resize(self, new_width, new_height):
+    def resize(self, new_width, new_height, optimize_for_slack=False, max_frames=None):
         """
         GIFをリサイズする
         
         Args:
             new_width: 新しい幅
             new_height: 新しい高さ
+            optimize_for_slack: Slackスタンプ用に最適化するかどうか
+            max_frames: 最大フレーム数（Noneの場合は制限なし）
         
         Returns:
             bytes: リサイズされたGIFのバイトデータ
@@ -85,6 +87,10 @@ class GIFProcessor:
             frame_index = 0
             while True:
                 try:
+                    # フレーム数制限チェック
+                    if max_frames and frame_index >= max_frames:
+                        break
+                    
                     # フレームをリサイズ
                     gif.seek(frame_index)
                     frame = gif.copy()
@@ -104,20 +110,79 @@ class GIFProcessor:
         output = io.BytesIO()
         
         try:
+            # Slackスタンプ用の最適化設定
+            save_kwargs = {
+                'format': 'GIF',
+                'save_all': True,
+                'append_images': frames[1:],
+                'duration': self.original_info['duration'],
+                'loop': self.original_info['loop'],
+                'optimize': True
+            }
+            
+            if optimize_for_slack:
+                # Slackスタンプ用の最適化
+                save_kwargs.update({
+                    'optimize': True,
+                    'quality': 85,  # 品質を少し下げてサイズ削減
+                    'transparency': 0,  # 透明度を無効化
+                })
+            
             # 最初のフレームを保存し、残りのフレームを追加
-            frames[0].save(
-                output,
-                format='GIF',
-                save_all=True,
-                append_images=frames[1:],
-                duration=self.original_info['duration'],
-                loop=self.original_info['loop'],
-                optimize=True  # ファイルサイズを最適化
-            )
+            frames[0].save(output, **save_kwargs)
+            
+            # Slackスタンプ用の追加最適化
+            if optimize_for_slack:
+                result_bytes = output.getvalue()
+                # 128KB以下になるまで品質を下げる
+                while len(result_bytes) > SLACK_STAMP_MAX_SIZE_BYTES and save_kwargs.get('quality', 85) > 30:
+                    output = io.BytesIO()
+                    save_kwargs['quality'] = save_kwargs.get('quality', 85) - 5
+                    frames[0].save(output, **save_kwargs)
+                    result_bytes = output.getvalue()
+                
+                return result_bytes
+            
         except Exception as e:
             raise ValueError(f"GIF保存中にエラーが発生しました: {str(e)}")
         
         return output.getvalue()
+    
+    def create_slack_stamp(self, optimization_level="standard"):
+        """
+        Slackスタンプ用のGIFを作成
+        
+        Args:
+            optimization_level: 最適化レベル ("standard", "optimized", "lightweight")
+        
+        Returns:
+            bytes: Slackスタンプ用GIFのバイトデータ
+        """
+        from constants import SLACK_STAMP_SIZE, SLACK_STAMP_MAX_FRAMES, SLACK_STAMP_MAX_SIZE_BYTES, SLACK_STAMP_MAX_SIZE_KB
+        
+        if optimization_level == "standard":
+            # 標準的なSlackスタンプ
+            return self.resize(SLACK_STAMP_SIZE, SLACK_STAMP_SIZE)
+        
+        elif optimization_level == "optimized":
+            # フレーム数制限付き
+            return self.resize(SLACK_STAMP_SIZE, SLACK_STAMP_SIZE, 
+                             optimize_for_slack=True, max_frames=SLACK_STAMP_MAX_FRAMES)
+        
+        elif optimization_level == "lightweight":
+            # 128KB以下に最適化
+            result = self.resize(SLACK_STAMP_SIZE, SLACK_STAMP_SIZE, 
+                               optimize_for_slack=True, max_frames=SLACK_STAMP_MAX_FRAMES)
+            
+            # サイズチェック
+            if len(result) > SLACK_STAMP_MAX_SIZE_BYTES:
+                raise ValueError(f"Slackスタンプのサイズ制限（{SLACK_STAMP_MAX_SIZE_KB}KB）を超えています。"
+                               f"現在のサイズ: {len(result) / 1024:.1f}KB")
+            
+            return result
+        
+        else:
+            raise ValueError("無効な最適化レベルです")
     
     def get_info(self):
         """

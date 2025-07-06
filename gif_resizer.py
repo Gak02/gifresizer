@@ -65,7 +65,7 @@ def main():
                 render_original_info(processor)
             
             with col2:
-                new_width, new_height, maintain_aspect = render_resize_settings(
+                new_width, new_height, maintain_aspect, slack_optimization = render_resize_settings(
                     info['width'], 
                     info['height']
                 )
@@ -74,15 +74,21 @@ def main():
             if st.button("🔄 リサイズ実行", type="primary"):
                 try:
                     with st.spinner("GIFをリサイズしています..."):
-                        # アスペクト比を維持する場合の調整
-                        if maintain_aspect:
-                            new_width, new_height = adjust_size_for_aspect_ratio(
-                                new_width, new_height, 
-                                info['width'], info['height']
-                            )
-                        
-                        # GIFをリサイズ
-                        resized_gif_bytes = processor.resize(new_width, new_height)
+                        # Slackスタンプ最適化が有効な場合
+                        if slack_optimization:
+                            st.info(f"🎯 Slackスタンプ用に最適化中... ({slack_optimization})")
+                            resized_gif_bytes = processor.create_slack_stamp(slack_optimization)
+                            new_width = new_height = 128  # Slackスタンプサイズ
+                        else:
+                            # アスペクト比を維持する場合の調整
+                            if maintain_aspect:
+                                new_width, new_height = adjust_size_for_aspect_ratio(
+                                    new_width, new_height, 
+                                    info['width'], info['height']
+                                )
+                            
+                            # 通常のリサイズ
+                            resized_gif_bytes = processor.resize(new_width, new_height)
                         
                         # 結果を表示
                         render_resize_result(
